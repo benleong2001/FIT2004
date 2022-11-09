@@ -1,0 +1,474 @@
+""" FIT2004 - Assignment 2
+
+"""
+
+from math import inf
+
+INFINITY = inf
+
+
+class RoadGraph:
+    """ RoadGraph Class - Assignment 2: Problem 1 """
+
+    def __init__(self, r_list, c_list):
+        """ Basic Constructor for RoadGraph class
+        :Input:
+            r_list: A list of road tuples in the form (u, v, w)
+                        representing the edges in the graph.
+            c_list: A list of tuples in the form (loc, wait)
+                        representing cafes and waiting time.
+
+        :Time Complexity:
+            Best:
+            Worst:
+
+        :Space Complexity:
+            Input:
+            Aux:
+        """
+
+        # Finding the highest Vertex id
+        max_vert = -1
+        for road in r_list:
+            u, v, _ = road
+            max_vert = max(max_vert, max(u, v))
+
+        # Looping through r_list
+        self.vertices = [None] * (max_vert + 1)
+        for road in r_list:
+            u, v, w = road
+            u_vert = self.vertices[u] or Vertex(u)
+            v_vert = self.vertices[v] or Vertex(v)
+
+            # Adding the vertices to self.vertices if not already done
+            if not self.vertices[u]:
+                self.vertices[u] = u_vert
+            if not self.vertices[v]:
+                self.vertices[v] = v_vert
+
+            # Adding edges (and reversed edges) to both vertices
+            u_vert.add_edge(v_vert, w)
+            v_vert.add_rev_edge(u_vert, w)
+
+        # Adding waiting times to locations that are cafes
+        for c in c_list:
+            cafe, wait = c
+            vert = self.vertices[cafe]
+            vert.set_waiting_time(wait)
+
+    def dijkstra(self, source_id, fromEnd=False):
+        """ Dijkstra Function to find the shortest distance from source to the other Locations
+        :Input:
+            source_id: The id of the source Vertex
+            fromEnd: A boolean value stating whether source is the start or end from routing()
+
+        :Post Condition:    All Vertices will have their respective distances from source as their attribute values
+
+        :Time Complexity:
+            Best:
+            Worst:
+
+        :Space Complexity:
+            Input:
+            Aux:
+        """
+        source = self.vertices[source_id]
+        source.distance[fromEnd] = 0
+        source.discovered = True
+        source.previous[fromEnd] = None if fromEnd else []
+
+        dijk_minheap = MinHeap(len(self.vertices), fromEnd)
+
+        # Resetting all vertices
+        for vert in self.vertices:
+            if vert.id != source_id:
+                vert.distance[fromEnd] = INFINITY
+                vert.discovered, vert.visited = False, False
+                vert.previous[fromEnd] = None if fromEnd else []
+            dijk_minheap.append(vert)
+
+        # Traversing the entire graph
+        while len(dijk_minheap) > 0:
+            u = dijk_minheap.serve()
+            u.visited = True
+            edges = u.rev_edges if fromEnd else u.edges
+
+            # Going through all edges of u
+            for edge in edges:
+                v = edge.v
+                new_dist = edge.w + u.distance[fromEnd]
+
+                # Add neighbouring vertices to discovered if not in already
+                if not v.discovered:
+                    v.discovered = True
+
+                    # Updating distance and previous vertex
+                    v.distance[fromEnd] = new_dist
+                    v.previous[fromEnd] = u if fromEnd else u.previous[0] + [u.id]
+                    dijk_minheap.rise(v)
+
+                # Not visited = not finalised
+                elif not v.visited and v.distance[fromEnd] > new_dist:
+                    # Updating distance and previous vertex
+                    v.distance[fromEnd] = new_dist
+                    v.previous[fromEnd] = u if fromEnd else u.previous[0] + [u.id]
+                    dijk_minheap.rise(v)
+
+    def routing(self, start, end):
+        """ Routing function that finds the shortest route from start to end
+                which passes a cafe to get coffee too
+
+        :Input:
+            start:  The starting vertex id
+            end:    The ending vertex id
+
+        :Returns:   The route from start to end that passes a cafe
+
+        :Time Complexity:
+            Best:   O(E log V)
+            Worst:  O(E log V)
+
+        :Space Complexity:
+            Input:  
+            Aux:    
+        """
+        # Perform dijkstra from start to all locations
+        # and from end to all locations (using reversed edges)
+        self.dijkstra(start)
+        self.dijkstra(end, True)
+
+        # Find the cafe with the shortest travel + wait time
+        min_time = INFINITY
+        cafe = None
+        for vert in self.vertices:
+            if vert.isCafe and (new_min := sum(vert.distance) + vert.wait) < min_time:
+                min_time = new_min
+                cafe = vert
+        
+        # Retrieve the (returning) route from start to cafe to end
+        route, next = cafe.previous
+        route.append(cafe.id)
+
+        # When next reaches the end, the following value will be None, terminating the loop.
+        while next:
+            route.append(next.id)
+            next = next.previous[1]
+        return route
+
+    def alt_routing(self):
+        """ 'Better' way to do routing
+        start --- cafe --- end
+        
+
+        """
+
+    def __str__(self):
+        return "\n".join([str(v) for v in self.vertices])
+
+
+class Vertex:
+    """ A Vertex Class for the RoadGraph class
+    ATTRIBUTES:
+        id:         A unique id to distinguish vertices apart
+        edges:      A list of Edges that are outgoing from the Vertex
+        rev_edges:  A list of Edges that are incoming into the Vertex
+        isCafe:     A boolean value stating if the Vertex is a cafe
+        inDist:     The distance from start to the Vertex (for routing())
+        outDist:    The distance from the vertex to end (for routing())
+        discovered: A boolean value stating if the Vertex has been discovered (for dijkstra())
+        visited:    A boolean value stating if the Vertex has been visited (for dijkstra())
+    """
+    def __init__(self, id) -> None:
+        """ Basic Constructor for Vertex class
+        :Input:
+            id: An integer representing the id of the Vertex
+
+        :Time Complexity:
+            Best: O(1)
+            Worst: O(1)
+
+        :Space Complexity:
+            Input: O(1)
+            Aux: O(1)
+        """
+        self.id = id
+        self.edges, self.rev_edges = [], []
+        self.isCafe = False
+
+        # Instance variables used for dijkstra and routing functions in RoadGraph
+        self.inDist, self.outDist = INFINITY, INFINITY
+        self.distance = [INFINITY, INFINITY]
+        self.discovered, self.visited = False, False
+        self.previous = [[], None]
+
+    def add_edge(self, v, w) -> None:
+        """ Method to add an edge to the Vertex's list of edges
+        :Input:
+            v: The incoming vertex of the Edge
+            w: The travelling time from self to Vertex v
+
+        :Post condition: The vertex gains one more edge
+
+        :Time Complexity:
+            Best:  O(1)
+            Worst: O(1)
+
+        :Space Complexity:
+            Input: O(1)
+            Aux:   O(1)
+        """
+        self.edges.append(Edge(self, v, w))
+
+    def add_rev_edge(self, u, w) -> None:
+        """ Method to add an edge to the Vertex's list of reversed edges
+        :Input:
+            u: The outgoing Vertex of the Edge
+            w: The travelling time from Vertex u to self
+
+        :Post condition: The vertex gains one more rev_edge
+
+        :Time Complexity:
+            Best:  O(1)
+            Worst: O(1)
+
+        :Space Complexity:
+            Input: O(1)
+            Aux:   O(1)
+        """
+        self.rev_edges.append(Edge(self, u, w))
+
+    def set_waiting_time(self, wait) -> None:
+        """ Mutator (setter) for the waiting time for the cafe.
+            The method also sets isCafe to True since only cafes have waiting times.
+        :Input:
+            wait: The waiting time for the cafe
+
+        :Time Complexity:
+            Best: O(1)
+            Worst: O(1)
+
+        :Space Complexity:
+            Input: O(1)
+            Aux: O(1)
+        """
+        self.isCafe = True
+        self.wait = wait
+
+    def __str__(self) -> str:
+        """ toString method for the Vertex class 
+        :Returns: The string representation of the Vertex """
+        return "Location " + str(self.id) + " with roads " + "\n".join([str(e) for e in self.edges])
+
+
+class Edge:
+    """ An Edge class for the RoadGraph Class """
+    def __init__(self, u, v, w) -> None:
+        """ Basic Constructor for RoadGraph class
+        :Input:
+            u: The outgoing Vertex of the Edge
+            v: The incoming Vertex of the Edge
+            w: The travelling time from u to v
+
+        :Time Complexity:
+            Best:  O(1)
+            Worst: O(1)
+
+        :Space Complexity:
+            Input: O(1)
+            Aux:   O(1)
+        """
+        self.u, self.v, self.w = u, v, w
+
+    def __str__(self) -> str:
+        """ toString method for the Edge class
+        :Returns: The string representation of the Edge """
+        return "Road to Location " + str(self.v.id) + " with travel time " + str(self.w)
+
+
+class MinHeap:
+    """ A priority heap class that prioritises the minimum element """
+    def __init__(self, maximum, fromEnd):
+        """ Basic Constructor for the MinHeap Class
+        :Input:
+            maximum: The greatest number of nodes in the heap
+            fromEnd: A boolean value stating if dijkstra is executed from end
+        """
+        # Heap array to hold (vertex, dist) values
+        self.heap_arr = [None] * (maximum + 1)
+
+        # for vertex v, array[v] holds its index in heap_array
+        self.ind_arr = [None] * maximum
+
+        # This length only counts how many vertices is in the heap
+        # len(self) + 1 == len(self.heap_arr)
+        self.length = 0
+        self.fromEnd = fromEnd
+
+    def __len__(self) -> int:
+        """ Returns the length of the heap """
+        return self.length
+
+    def get_dist(self, v):
+        """ Returns the appropriate dist length based on which dijk is executing """
+        return v.distance[self.fromEnd]
+
+    def rise(self, source):
+        """ Rises a node to its correct position
+        :param source: The node to rise
+        """
+        src_ind = self.ind_arr[source.id]
+        while src_ind > 1:
+            if self.get_dist(source) < self.get_dist(self.heap_arr[src_ind // 2]):
+                self.swap(src_ind, src_ind // 2)
+                src_ind //= 2
+            else:
+                break
+
+    def sink(self, source):
+        """ Sinks a node to its correct position 
+        :param source: The node to sink
+        """
+        src_ind = self.ind_arr[source.id]
+        while src_ind * 2 <= len(self):
+            smallest_ind = self.smallest_child_ind(source)
+            if self.get_dist(self.heap_arr[smallest_ind]) < self.get_dist(source):
+                self.swap(smallest_ind, src_ind)
+                src_ind = smallest_ind
+            else:
+                break
+
+    def smallest_child_ind(self, source):
+        """ Find the smallest child of source node 
+        :returns: The index of the smallest child
+        """
+        heap_ind = self.ind_arr[source.id]
+        if heap_ind * 2 == len(self) or self.get_dist(self.heap_arr[heap_ind * 2]) < self.get_dist(self.heap_arr[heap_ind * 2 + 1]):
+            return heap_ind * 2
+        return heap_ind * 2 + 1
+
+    def swap(self, child_ind, parent_ind):
+        """ Swaps two nodes """
+        child, parent = self.heap_arr[child_ind].id, self.heap_arr[parent_ind].id
+
+        # Swapping child and parent vertices in both index_arr and heap_arr
+        self.ind_arr[child], self.ind_arr[parent] = parent_ind, child_ind
+        self.heap_arr[child_ind], self.heap_arr[parent_ind] = self.heap_arr[parent_ind], self.heap_arr[child_ind]
+
+    def append(self, vert):
+        """ Adds a node to the heap """
+        self.length += 1
+        self.heap_arr[self.length], self.ind_arr[vert.id] = vert, self.length
+        self.rise(vert)
+
+    def serve(self):
+        """ Equivalent to get_min """
+        self.swap(1, len(self.heap_arr) - 1)
+        vert = self.heap_arr.pop()
+        self.length -= 1
+        if len(self) > 0:
+            self.sink(self.heap_arr[1])
+        return vert
+
+    def __str__(self):
+        return "\n".join([str(v) for v in self.heap_arr])
+
+class Graph:
+    def __init__(self, e_list) -> None:
+        """ Basic Constructor of a generic graph class
+        :Input:
+            e_list: A list of edges
+        """
+        max_vert = -1
+
+        # Find the highest vertex id
+        for e in e_list:
+            u, v, _ = e
+            max_vert = max(max_vert, max(u, v))
+
+        self.vertices = [None] * (max_vert + 1)
+
+        for e in e_list:
+            u, v, w = e
+            u_vert = self.vertices[u] or Vertex(u)
+            v_vert = self.vertices[v] or Vertex(v)
+
+            # Adding the vertices to self.vertices if not already done
+            if not self.vertices[u]:
+                self.vertices[u] = u_vert
+            if not self.vertices[v]:
+                self.vertices[v] = v_vert
+
+            # Adding edges (and reversed edges) to both vertices
+            u_vert.add_edge(v_vert, w)
+
+
+# PROBLEM 2
+def optimalRoute(downhillScores, start, finish):
+    """ Function to find the most optimal route that acquires 
+            the maximum amount of points from start to finish
+    :Input:
+        downhillScore: A tuple that indicates the starting, ending and points acquired of a downhill segment
+        start:      The starting point of the route
+        finish:     The finishing point of the route
+
+    :Returns:
+
+    :Time Complexity:
+        Best:
+        Worst:        
+
+    :Space Complexity:
+        Input:
+        Aux:
+    """
+
+    """
+    Start at end
+    Base: Consider no edges
+    
+    """
+    pass
+
+
+if __name__ == '__main__':
+    roads = [(0, 1, 4), (1, 2, 2), (2, 3, 3), (3, 4, 1), (1, 5, 2),
+             (5, 6, 5), (6, 3, 2), (6, 4, 3), (1, 7, 4), (7, 8, 2),
+             (8, 7, 2), (7, 3, 2), (8, 0, 11), (4, 3, 1), (4, 8, 10)]
+    cafes = [(5, 10), (6, 1), (7, 5), (0, 3), (8, 4)]
+    mygraph = RoadGraph(roads, cafes)
+    start = 1
+    end = 7
+    # for v in mygraph.vertices:
+    #     for e in v.rev_edges:
+    #         print(e.w)
+    print("TEST #1")
+    print(mygraph.routing(start, end))
+    print()
+
+    start = 7
+    end = 8
+    print("TEST #2")
+    print(mygraph.routing(start, end))
+    print()
+
+    start = 1
+    end = 3
+    print("TEST #3")
+    print(mygraph.routing(start, end))
+    print()
+
+    start = 1
+    end = 4
+    print("TEST #4")
+    print(mygraph.routing(start, end))
+    print()
+
+    start = 3
+    end = 4
+    print("TEST #5")
+    print(mygraph.routing(start, end))
+
+    start = 1
+    end = 1
+    print("TEST #6")
+    print(mygraph.routing(start, end))
